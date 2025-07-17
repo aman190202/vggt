@@ -28,10 +28,9 @@ data:
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
-        - _target_: data.datasets.co3d.Co3dDataset
+        - _target_: data.datasets.colmap.ColmapDataset
           split: train
-          CO3D_DIR: /YOUR/PATH/TO/CO3D
-          CO3D_ANNOTATION_DIR: /YOUR/PATH/TO/CO3D_ANNOTATION
+          COLMAP_DIR: /home/works/coolant-dataset/sample
   val:
     _target_: data.dynamic_dataloader.DynamicTorchDataset
     num_workers: ${num_workers}
@@ -43,11 +42,9 @@ data:
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
-        - _target_: data.datasets.co3d.Co3dDataset
+        - _target_: data.datasets.colmap.ColmapDataset
           split: test
-          CO3D_DIR: /YOUR/PATH/TO/CO3D
-          CO3D_ANNOTATION_DIR: /YOUR/PATH/TO/CO3D_ANNOTATION
-
+          COLMAP_DIR: /home/works/coolant-dataset/sample
 
 logging:
   log_dir: logs
@@ -86,7 +83,7 @@ logging:
 checkpoint:
   save_dir: logs/${exp_name}/ckpts
   save_freq: 5
-  resume_checkpoint_path: /YOUR/PATH/TO/CKPT
+  resume_checkpoint_path: /home/works/vggt/checkpoint/model.pt
   strict: False
 
 
@@ -95,10 +92,11 @@ loss:
   camera: 
     weight: 5.0
     loss_type: "l1" # The paper uses smooth l1 loss, but we found l1 loss is more stable than smooth l1 and l2 loss.  
-  depth:
-    weight: 1.0
-    gradient_loss_fn: "grad" 
-    valid_range: 0.98
+  depth: null
+  # depth:
+  #   weight: 1.0
+  #   gradient_loss_fn: "grad" 
+  #   valid_range: 0.98
   point: null
   # If you want to enable point, use the following config
   # point: 
@@ -130,9 +128,9 @@ optim:
       - module_name: ["aggregator"]
         max_norm: 1.0   # feel free to reduce this if you see instabilities
         norm_type: 2
-      - module_name: ["depth"]
-        max_norm: 1.0   # feel free to reduce this if you see instabilities
-        norm_type: 2
+      # - module_name: ["depth"]
+      #   max_norm: 1.0   # feel free to reduce this if you see instabilities
+      #   norm_type: 2
       - module_name: ["camera"]
         max_norm: 1.0   # feel free to reduce this if you see instabilities
         norm_type: 2
@@ -162,7 +160,7 @@ max_epochs: 20
 model:
   _target_: vggt.models.vggt.VGGT
   enable_camera: True
-  enable_depth: True
+  enable_depth: False
   enable_point: False
   enable_track: False
 
