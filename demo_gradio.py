@@ -29,10 +29,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Initializing and loading VGGT model...")
 # model = VGGT.from_pretrained("facebook/VGGT-1B")  # another way to load the model
 
-model = VGGT()
+model = VGGT( enable_camera=True, enable_point=False, enable_depth=False, enable_track=False)
 _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
-model.load_state_dict(torch.hub.load_state_dict_from_url(_URL))
-
+# model.load_state_dict(torch.hub.load_state_dict_from_url(_URL))
+model.load_state_dict(torch.load("checkpoint/checkpoint_10.pt"),strict=False)
 
 model.eval()
 model = model.to(device)
@@ -81,16 +81,34 @@ def run_model(target_dir, model) -> dict:
     predictions["intrinsic"] = intrinsic
 
     # Convert tensors to numpy
-    for key in predictions.keys():
-        if isinstance(predictions[key], torch.Tensor):
-            predictions[key] = predictions[key].cpu().numpy().squeeze(0)  # remove batch dimension
-    predictions['pose_enc_list'] = None # remove pose_enc_list
+    for key, value in list(predictions.items()):
+        if isinstance(value, torch.Tensor):
+            predictions[key] = value.cpu().numpy().squeeze(0)  # remove batch dimension
 
-    # Generate world points from depth map
-    print("Computing world points from depth map...")
-    depth_map = predictions["depth"]  # (S, H, W, 1)
-    world_points = unproject_depth_map_to_point_map(depth_map, predictions["extrinsic"], predictions["intrinsic"])
-    predictions["world_points_from_depth"] = world_points
+    # Remove potentially large intermediate list to save space
+    predictions.pop("pose_enc_list", None)
+
+    # -----------------------------------------------------------------
+    # Safely handle optional branches (depth / point)
+    # -----------------------------------------------------------------
+    if "depth" in predictions:
+        # Generate world points from depth map if depth is available
+        print("Computing world points from depth map...")
+        depth_map = predictions["depth"]  # (S, H, W, 1)
+        world_points = unproject_depth_map_to_point_map(
+            depth_map, predictions["extrinsic"], predictions["intrinsic"]
+        )
+        predictions["world_points_from_depth"] = world_points
+
+    # If neither point nor depth information is present, create *tiny* placeholders
+    # instead of (S × H × W) zeros which can reach hundreds of MB and slow GLB export.
+    if "world_points" not in predictions and "world_points_from_depth" not in predictions:
+        print("Warning: Model did not return depth or point predictions – using 1-point placeholder to keep viz code happy.")
+        S = images.shape[0]
+        placeholder_pts = np.zeros((S, 1, 1, 3), dtype=np.float32)  # minimal safe shape
+        placeholder_conf = np.zeros((S, 1, 1), dtype=np.float32)
+        predictions["world_points_from_depth"] = placeholder_pts
+        predictions["world_points_conf"] = placeholder_conf
 
     # Clean up
     torch.cuda.empty_cache()
@@ -228,6 +246,8 @@ def gradio_demo(
     )
 
     # Convert predictions to GLB
+    show_points_flag = ("world_points" in predictions) or ("world_points_from_depth" in predictions and predictions["world_points_from_depth"].size > 3)
+
     glbscene = predictions_to_glb(
         predictions,
         conf_thres=conf_thres,
@@ -238,7 +258,10 @@ def gradio_demo(
         mask_sky=mask_sky,
         target_dir=target_dir,
         prediction_mode=prediction_mode,
+        show_points=show_points_flag,
     )
+    print(f"Exporting GLB to {glbfile}")
+    print(f"Does glbscene exist? {glbscene is not None}")
     glbscene.export(file_obj=glbfile)
 
     # Cleanup
@@ -277,6 +300,8 @@ def update_visualization(
     Reload saved predictions from npz, create (or reuse) the GLB for new parameters,
     and return it for the 3D viewer. If is_example == "True", skip.
     """
+    print(f"[update_visualization] target_dir = {target_dir}")
+    print(f"[update_visualization] conf_thres = {conf_thres}, frame_filter = {frame_filter}, mode = {prediction_mode}")
 
     # If it's an example click, skip as requested
     if is_example == "True":
@@ -289,20 +314,10 @@ def update_visualization(
     if not os.path.exists(predictions_path):
         return None, f"No reconstruction available at {predictions_path}. Please run 'Reconstruct' first."
 
-    key_list = [
-        "pose_enc",
-        "depth",
-        "depth_conf",
-        "world_points",
-        "world_points_conf",
-        "images",
-        "extrinsic",
-        "intrinsic",
-        "world_points_from_depth",
-    ]
-
+    # Dynamically load whatever keys were saved to avoid KeyErrors when certain
+    # branches (depth / point) were not present during inference.
     loaded = np.load(predictions_path)
-    predictions = {key: np.array(loaded[key]) for key in key_list}
+    predictions = {key: np.array(loaded[key]) for key in loaded.files}
 
     glbfile = os.path.join(
         target_dir,
@@ -310,6 +325,8 @@ def update_visualization(
     )
 
     if not os.path.exists(glbfile):
+        show_points_flag = ("world_points" in predictions) or ("world_points_from_depth" in predictions and predictions["world_points_from_depth"].size > 3)
+
         glbscene = predictions_to_glb(
             predictions,
             conf_thres=conf_thres,
@@ -320,6 +337,7 @@ def update_visualization(
             mask_sky=mask_sky,
             target_dir=target_dir,
             prediction_mode=prediction_mode,
+            show_points=show_points_flag,
         )
         glbscene.export(file_obj=glbfile)
 

@@ -1,14 +1,14 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: exp001
+exp_name: exp003
 img_size: 518
 num_workers: 8
 seed_value: 42
 accum_steps: 2    # We did not use gradient accumulation in our training, while if you suffer from OOM, you can try to use it.
 patch_size: 14
-val_epoch_freq: 5
-max_img_per_gpu: 48
+val_epoch_freq: 10
+max_img_per_gpu: 12
 
 limit_train_batches: 800
 limit_val_batches: 400
@@ -31,6 +31,7 @@ data:
         - _target_: data.datasets.colmap.ColmapDataset
           split: train
           COLMAP_DIR: /home/works/coolant-dataset/sample
+          len_train : 1
   val:
     _target_: data.dynamic_dataloader.DynamicTorchDataset
     num_workers: ${num_workers}
@@ -45,6 +46,7 @@ data:
         - _target_: data.datasets.colmap.ColmapDataset
           split: test
           COLMAP_DIR: /home/works/coolant-dataset/sample
+          len_test : 1
 
 logging:
   log_dir: logs
@@ -64,9 +66,9 @@ logging:
         - loss_T
         - loss_R
         - loss_FL
-        - loss_conf_depth
-        - loss_reg_depth
-        - loss_grad_depth
+        # - loss_conf_depth
+        # - loss_reg_depth
+        # - loss_grad_depth
     val:
       keys_to_log:
         - loss_objective
@@ -74,15 +76,15 @@ logging:
         - loss_T
         - loss_R
         - loss_FL
-        - loss_conf_depth
-        - loss_reg_depth
-        - loss_grad_depth
+        # - loss_conf_depth
+        # - loss_reg_depth
+        # - loss_grad_depth
 
 
 
 checkpoint:
   save_dir: logs/${exp_name}/ckpts
-  save_freq: 5
+  save_freq: 100
   resume_checkpoint_path: /home/works/vggt/checkpoint/model.pt
   strict: False
 
@@ -90,7 +92,7 @@ checkpoint:
 loss:
   _target_: loss.MultitaskLoss
   camera: 
-    weight: 5.0
+    weight: 6.0
     loss_type: "l1" # The paper uses smooth l1 loss, but we found l1 loss is more stable than smooth l1 and l2 loss.  
   depth: null
   # depth:
@@ -132,7 +134,7 @@ optim:
       #   max_norm: 1.0   # feel free to reduce this if you see instabilities
       #   norm_type: 2
       - module_name: ["camera"]
-        max_norm: 1.0   # feel free to reduce this if you see instabilities
+        max_norm: 0.5   # feel free to reduce this if you see instabilities, previously 1.0
         norm_type: 2
   options:
     lr:
@@ -155,7 +157,7 @@ optim:
 
 
 
-max_epochs: 20
+max_epochs: 1000
 
 model:
   _target_: vggt.models.vggt.VGGT
