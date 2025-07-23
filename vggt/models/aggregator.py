@@ -226,8 +226,18 @@ class Aggregator(nn.Module):
             if metadata.shape[1] != S:
                 raise ValueError(f"metadata seq len {metadata.shape[1]} does not match images seq len {S}")
 
-            metadata_flat = metadata.view(B * S, -1).to(patch_tokens.device)  # (B*S, D)
-            patch_tokens = self.film(patch_tokens, metadata_flat)
+            metadata_flat = metadata.view(B * S, -1).to(device='cuda')  # (B*S, D)
+
+            # patch_tokens may be a dict (depending on patch_embed implementation)
+            if isinstance(patch_tokens, dict):
+                # Keep reference to original dict and extract tensor to modulate
+                pt_dict = patch_tokens
+                pt_tensor = patch_tokens["x_norm_patchtokens"]
+                pt_tensor = self.film(pt_tensor, metadata_flat)
+                pt_dict["x_norm_patchtokens"] = pt_tensor
+                patch_tokens = pt_dict
+            else:
+                patch_tokens = self.film(patch_tokens, metadata_flat)
 
 
         if isinstance(patch_tokens, dict):

@@ -18,7 +18,7 @@ model.load_state_dict(torch.load("/home/works/vggt/training/logs/exp003/ckpts/ch
 
 # ─── your image list here ─────────────────────────────────────────
 import glob
-image_root = "/home/works/coolant-dataset/dataset/GT_AV_F2025_P_P144/images"
+image_root = "/home/works/coolant-dataset/dataset/GT_AV_F2025_P_P128/images"
 image_names = sorted(glob.glob(f"{image_root}/*"))
 images = load_and_preprocess_images(image_names).to(device)
 

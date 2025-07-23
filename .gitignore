@@ -153,3 +153,5 @@ checkpoint/
 training/logs/
 apple_train.jgz
 training/vkitti/
+vkitti/
+*.ply
