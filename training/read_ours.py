@@ -66,8 +66,10 @@ def qvec2rotmat(qvec):
     )
 
 from data.read_write_model import read_model
-cameras, images = read_model("/home/works/coolant-dataset/dataset/GT_AV_F2025_P_P144/sparse")
+cameras, images = read_model("/home/works/coolant-dataset/dataset/GT_AV_F2025_P_P128/sparse")
 for img_id, img in images.items():
+    if(img_id != 29):
+        continue
     img_data, cam_data = img, cameras[img.camera_id]
     K = colmap_intrinsics_to_opencv(cam_data)
     ext = colmap_extrinsics_to_opencv(img_data)

@@ -147,7 +147,7 @@ class ComposedDataset(Dataset, ABC):
             "cam_points": cam_points,
             "world_points": world_points,
             "point_masks": point_masks,
-            # Placeholder metadata tensor (S, 6). Replace with real GPS/IMU if available.
+            # Placeholder metadata tensor (S, 6). Replace with real GPS/IMU 
             "metadata": metadata,
         }
 

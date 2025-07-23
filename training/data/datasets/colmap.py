@@ -70,7 +70,7 @@ class ColmapDataset(BaseDataset):
         self,
         common_conf,
         split: str = "train",
-        COLMAP_DIR: str = "/home/works/coolant-dataset/dataset",
+        COLMAP_DIR: str = "/home/works/GreenTrees",
         min_num_images: int = 24,
         len_train: int = 100_000,
         len_test: int = 10_000,
@@ -116,14 +116,15 @@ class ColmapDataset(BaseDataset):
                 continue
 
             for img_id, img in images.items():
-                img_path = osp.join(scene_path, "images", img.name)
+                img_path = osp.join(scene_path, "undistorted_images", img.name)
                 if not osp.isfile(img_path):
                     continue
-
+                gps_path = osp.join(scene_path, "metadata", img.name + ".json")
                 self.scene_map[(scene, img_id)] = {
                     "image": img,
                     "camera": cameras[img.camera_id],
                     "img_path": img_path,
+                    "gps_path" : gps_path
                 }
 
         self.entries: List[Tuple[str, int]] = list(self.scene_map.keys())
@@ -155,7 +156,7 @@ class ColmapDataset(BaseDataset):
     def get_data(
         self,
         seq_index=None,
-        img_per_seq: int = 1,
+        img_per_seq: int = 30,
         seq_name=None,           # <- kept for API compatibility
         ids=None,
         aspect_ratio: float = 1.0,
@@ -171,13 +172,30 @@ class ColmapDataset(BaseDataset):
         intrinsics, extrinsics = [], []
         cam_points, world_points, point_masks, original_sizes = \
             [], [], [], []
+        metadatas = []  # Collect per-image metadata here
         # ------------------------------------------------------------------- #
 
         for scene_name, img_id in entry_tuples:
             meta = self.scene_map[(scene_name, img_id)]
             img_data, cam_data = meta["image"], meta["camera"]
             img_path = meta["img_path"]
-
+            gps_path = meta["gps_path"]
+            gps_data = None
+            if os.path.isfile(gps_path):
+                import json
+                with open(gps_path, "r") as f:
+                    gps_data = json.load(f)
+            if gps_data is not None:
+                metadata = [
+                    gps_data.get("latitude", 0.0),
+                    gps_data.get("longitude", 0.0),
+                    gps_data.get("altitude", 0.0),
+                    gps_data.get("pitch", 0.0),
+                    gps_data.get("roll", 0.0),
+                    gps_data.get("yaw", 0.0),
+                ]
+            else:
+                metadata = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             # --- load RGB -------------------------------------------------- #
             rgb = read_image_cv2(img_path)
             original_size = np.asarray(rgb.shape[:2], dtype=np.int32)
@@ -209,7 +227,6 @@ class ColmapDataset(BaseDataset):
                 target_shape,
                 filepath=img_path,
             )
-
             # --- collect --------------------------------------------------- #
             images.append(rgb_proc)
             depths.append(depth_proc)
@@ -219,6 +236,10 @@ class ColmapDataset(BaseDataset):
             world_points.append(world_pts)
             point_masks.append(mask_pts)
             original_sizes.append(original_size)
+            metadatas.append(metadata)
+
+        # Convert metadata list to numpy array for proper tensor conversion
+        metadatas = np.asarray(metadatas, dtype=np.float32)
 
         return {
             "seq_name": "colmap_batch",
@@ -232,4 +253,5 @@ class ColmapDataset(BaseDataset):
             "world_points": world_points,
             "point_masks": point_masks,
             "original_sizes": original_sizes,
+            "metadata" : metadatas
         }

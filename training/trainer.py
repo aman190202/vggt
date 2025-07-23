@@ -693,7 +693,7 @@ class Trainer:
         """
         tensor_keys = [
             "images", "depths", "extrinsics", "intrinsics", 
-            "cam_points", "world_points", "point_masks", 
+            "cam_points", "world_points", "point_masks", "metadata", "ids"
         ]        
         string_keys = ["seq_name"]
         

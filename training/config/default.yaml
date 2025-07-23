@@ -23,14 +23,14 @@ data:
     common_config:
       img_size: ${img_size}
       patch_size: ${patch_size}
-      debug: True
+      debug: False
       repeat_batch: True
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
         - _target_: data.datasets.colmap.ColmapDataset
           split: train
-          COLMAP_DIR: /home/works/coolant-dataset/sample
+          COLMAP_DIR: /home/works/GreenTrees
           len_train : 1
   val:
     _target_: data.dynamic_dataloader.DynamicTorchDataset
@@ -45,7 +45,7 @@ data:
       dataset_configs:
         - _target_: data.datasets.colmap.ColmapDataset
           split: test
-          COLMAP_DIR: /home/works/coolant-dataset/sample
+          COLMAP_DIR: /home/works/GreenTrees
           len_test : 1
 
 logging:
