@@ -118,6 +118,7 @@ class ComposedDataset(Dataset, ABC):
         world_points = torch.from_numpy(np.stack(batch["world_points"]).astype(np.float32))
         point_masks = torch.from_numpy(np.stack(batch["point_masks"])) # Mask indicating valid depths / world points / cam points per frame
         ids = torch.from_numpy(batch["ids"])    # Frame indices sampled from the original sequence
+        metadata = torch.from_numpy(np.stack(batch["metadata"]).astype(np.float32))
 
 
         # Invalidate all points if first frame has no valid points
@@ -146,6 +147,8 @@ class ComposedDataset(Dataset, ABC):
             "cam_points": cam_points,
             "world_points": world_points,
             "point_masks": point_masks,
+            # Placeholder metadata tensor (S, 6). Replace with real GPS/IMU if available.
+            "metadata": metadata,
         }
 
         # --- Track Processing (if enabled) ---

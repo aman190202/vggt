@@ -16,15 +16,6 @@ from data.read_write_model import read_model, qvec2rotmat
 # Helper functions
 # --------------------------------------------------------------------------- #
 
-
-def w2c_to_c2w(w2c: np.ndarray) -> np.ndarray:
-    """Convert 3×4 world-to-cam matrix to 3×4 cam-to-world (same shape)."""
-    R = w2c[:, :3]           # (3,3)
-    t = w2c[:, 3:]           # (3,1)
-    R_inv = R.T
-    t_inv = -R_inv @ t
-    return np.hstack([R_inv, t_inv])   
-
 def colmap_intrinsics_to_opencv(cam) -> np.ndarray:
     """
     Convert COLMAP camera parameters to a 3×3 OpenCV intrinsic matrix K.
@@ -113,6 +104,7 @@ class ColmapDataset(BaseDataset):
         for scene in scene_names:
             scene_path = osp.join(COLMAP_DIR, scene)
             sparse_dir = osp.join(scene_path, "sparse")
+            metadata_dir = osp.join(scene_path,"metadata")
 
             if not osp.isfile(osp.join(sparse_dir, "cameras.txt")):
                 continue
@@ -197,7 +189,6 @@ class ColmapDataset(BaseDataset):
             # --- intrinsics / extrinsics ----------------------------------- #
             K = colmap_intrinsics_to_opencv(cam_data)
             ext = colmap_extrinsics_to_opencv(img_data)
-            ext = w2c_to_c2w(ext)
 
             # --- standard preprocessing (resize, norm, points, …) --------- #
             (

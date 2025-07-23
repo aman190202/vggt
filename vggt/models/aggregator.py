@@ -15,6 +15,7 @@ from vggt.layers import PatchEmbed
 from vggt.layers.block import Block
 from vggt.layers.rope import RotaryPositionEmbedding2D, PositionGetter
 from vggt.layers.vision_transformer import vit_small, vit_base, vit_large, vit_giant2
+from vggt.models.film_gen import FiLM  # FiLM conditioning layer
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ class Aggregator(nn.Module):
         qk_norm (bool): Whether to apply QK normalization.
         rope_freq (int): Base frequency for rotary embedding. -1 to disable.
         init_values (float): Init scale for layer scale.
+        metadata_dim (int): Dimension of the metadata input for FiLM modulation.
+        film_hidden_dim (int): Hidden dimension for the FiLM layer.
     """
 
     def __init__(
@@ -68,6 +71,8 @@ class Aggregator(nn.Module):
         qk_norm=True,
         rope_freq=100,
         init_values=0.01,
+        metadata_dim: int = 6,
+        film_hidden_dim: int = 512,
     ):
         super().__init__()
 
@@ -115,6 +120,9 @@ class Aggregator(nn.Module):
         self.aa_order = aa_order
         self.patch_size = patch_size
         self.aa_block_size = aa_block_size
+
+        # FiLM layer for metadata conditioning (optional)
+        self.film = FiLM(input_dim=metadata_dim, hidden_dim=film_hidden_dim, feature_dim=embed_dim)
 
         # Validate that depth is divisible by aa_block_size
         if self.depth % self.aa_block_size != 0:
@@ -181,11 +189,13 @@ class Aggregator(nn.Module):
             if hasattr(self.patch_embed, "mask_token"):
                 self.patch_embed.mask_token.requires_grad_(False)
 
-    def forward(self, images: torch.Tensor) -> Tuple[List[torch.Tensor], int]:
+    def forward(self, images: torch.Tensor, metadata: torch.Tensor = None) -> Tuple[List[torch.Tensor], int]:
         """
         Args:
             images (torch.Tensor): Input images with shape [B, S, 3, H, W], in range [0, 1].
                 B: batch size, S: sequence length, 3: RGB channels, H: height, W: width
+            metadata (torch.Tensor): Optional metadata input for FiLM modulation.
+                Shape (B, S, metadata_dim) or (S, metadata_dim).
 
         Returns:
             (list[torch.Tensor], int):
@@ -202,7 +212,23 @@ class Aggregator(nn.Module):
 
         # Reshape to [B*S, C, H, W] for patch embedding
         images = images.view(B * S, C_in, H, W)
-        patch_tokens = self.patch_embed(images)
+        patch_tokens = self.patch_embed(images)  # (B*S, P, C)
+
+        # ------------------------------------------------------------------
+        # Optional FiLM modulation with per-frame metadata
+        # ------------------------------------------------------------------
+        if metadata is not None:
+            # Expect metadata shape (B, S, metadata_dim) or (S, metadata_dim)
+            if metadata.dim() == 2:  # (S, D)
+                metadata = metadata.unsqueeze(0)  # add batch dim => (1, S, D)
+            if metadata.shape[0] != B:
+                raise ValueError(f"metadata batch size {metadata.shape[0]} does not match images batch size {B}")
+            if metadata.shape[1] != S:
+                raise ValueError(f"metadata seq len {metadata.shape[1]} does not match images seq len {S}")
+
+            metadata_flat = metadata.view(B * S, -1).to(patch_tokens.device)  # (B*S, D)
+            patch_tokens = self.film(patch_tokens, metadata_flat)
+
 
         if isinstance(patch_tokens, dict):
             patch_tokens = patch_tokens["x_norm_patchtokens"]

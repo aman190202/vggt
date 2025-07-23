@@ -740,7 +740,8 @@ class Trainer:
             A dictionary containing the computed losses.
         """
         # Forward pass
-        y_hat = model(images=batch["images"])
+        metadata_tensor = batch.get("metadata", None)
+        y_hat = model(images=batch["images"], metadata=metadata_tensor)
         
         # Loss computation
         loss_dict = self.loss(y_hat, batch)

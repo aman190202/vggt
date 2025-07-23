@@ -520,25 +520,31 @@ def write_model(cameras, images, points3D, path, ext=".bin"):
 
 
 def qvec2rotmat(qvec):
-    return np.array(
-        [
-            [
-                1 - 2 * qvec[2] ** 2 - 2 * qvec[3] ** 2,
-                2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
-                2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2],
-            ],
-            [
-                2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
-                1 - 2 * qvec[1] ** 2 - 2 * qvec[3] ** 2,
-                2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1],
-            ],
-            [
-                2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
-                2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
-                1 - 2 * qvec[1] ** 2 - 2 * qvec[2] ** 2,
-            ],
-        ]
-    )
+    # return np.array(
+    #     [
+    #         [
+    #             1 - 2 * qvec[2] ** 2 - 2 * qvec[3] ** 2,
+    #             2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
+    #             2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2],
+    #         ],
+    #         [
+    #             2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
+    #             1 - 2 * qvec[1] ** 2 - 2 * qvec[3] ** 2,
+    #             2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1],
+    #         ],
+    #         [
+    #             2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
+    #             2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
+    #             1 - 2 * qvec[1] ** 2 - 2 * qvec[2] ** 2,
+    #         ],
+    #     ]
+    # )
+    x, y, z, w = qvec
+    return np.array([
+        [1 - 2*y**2 - 2*z**2,   2*x*y - 2*z*w,     2*x*z + 2*y*w],
+        [2*x*y + 2*z*w,         1 - 2*x**2 - 2*z**2, 2*y*z - 2*x*w],
+        [2*x*z - 2*y*w,         2*y*z + 2*x*w,     1 - 2*x**2 - 2*y**2]
+    ], dtype=np.float32)
 
 
 def rotmat2qvec(R):
