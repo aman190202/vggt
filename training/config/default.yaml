@@ -1,14 +1,14 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: exp003
+exp_name: scratch
 img_size: 518
 num_workers: 8
 seed_value: 42
-accum_steps: 2    # We did not use gradient accumulation in our training, while if you suffer from OOM, you can try to use it.
+accum_steps: 4   
 patch_size: 14
 val_epoch_freq: 10
-max_img_per_gpu: 12
+max_img_per_gpu: 120
 
 limit_train_batches: 800
 limit_val_batches: 400
@@ -31,7 +31,7 @@ data:
         - _target_: data.datasets.colmap.ColmapDataset
           split: train
           COLMAP_DIR: /home/works/GreenTrees
-          len_train : 1
+          len_train : 400
   val:
     _target_: data.dynamic_dataloader.DynamicTorchDataset
     num_workers: ${num_workers}
@@ -46,12 +46,12 @@ data:
         - _target_: data.datasets.colmap.ColmapDataset
           split: test
           COLMAP_DIR: /home/works/GreenTrees
-          len_test : 1
+          len_test : 100
 
 logging:
   log_dir: logs
   log_visuals: False
-  log_freq: 1
+  log_freq: 10
   log_level_primary: DEBUG
   log_level_secondary: WARNING
   all_ranks: False
@@ -66,9 +66,6 @@ logging:
         - loss_T
         - loss_R
         - loss_FL
-        # - loss_conf_depth
-        # - loss_reg_depth
-        # - loss_grad_depth
     val:
       keys_to_log:
         - loss_objective
@@ -76,9 +73,7 @@ logging:
         - loss_T
         - loss_R
         - loss_FL
-        # - loss_conf_depth
-        # - loss_reg_depth
-        # - loss_grad_depth
+
 
 
 
@@ -92,19 +87,10 @@ checkpoint:
 loss:
   _target_: loss.MultitaskLoss
   camera: 
-    weight: 6.0
+    weight: 3.0
     loss_type: "l1" # The paper uses smooth l1 loss, but we found l1 loss is more stable than smooth l1 and l2 loss.  
   depth: null
-  # depth:
-  #   weight: 1.0
-  #   gradient_loss_fn: "grad" 
-  #   valid_range: 0.98
   point: null
-  # If you want to enable point, use the following config
-  # point: 
-  #   weight: 1.0
-  #   gradient_loss_fn: "normal" 
-  #   valid_range: 0.98
   track: null   
 
 
@@ -115,7 +101,7 @@ optim:
 
   optimizer:
     _target_: torch.optim.AdamW
-    lr: 5e-5
+    lr: 2e-5
     weight_decay: 0.05
 
   frozen_module_names:
@@ -127,12 +113,6 @@ optim:
   gradient_clip:
     _target_: train_utils.gradient_clip.GradientClipper
     configs:
-      - module_name: ["aggregator"]
-        max_norm: 1.0   # feel free to reduce this if you see instabilities
-        norm_type: 2
-      # - module_name: ["depth"]
-      #   max_norm: 1.0   # feel free to reduce this if you see instabilities
-      #   norm_type: 2
       - module_name: ["camera"]
         max_norm: 0.5   # feel free to reduce this if you see instabilities, previously 1.0
         norm_type: 2

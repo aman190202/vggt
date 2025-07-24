@@ -18,13 +18,24 @@ model.load_state_dict(torch.load("/home/works/vggt/training/logs/exp003/ckpts/ch
 
 # ─── your image list here ─────────────────────────────────────────
 import glob
-image_root = "/home/works/coolant-dataset/dataset/GT_AV_F2025_P_P128/images"
+image_root = "/home/works/GreenTrees/GT_AV_F25_P087/images"
 image_names = sorted(glob.glob(f"{image_root}/*"))
-images = load_and_preprocess_images(image_names).to(device)
+meta = True
+if meta :
+    images, metadata = load_and_preprocess_images(image_names, return_metadata=True)
+    metadata = metadata.to(device)
+else:
+    images = load_and_preprocess_images(image_names, return_metadata=False)
+images = images.to(device)
 
-with torch.no_grad():
-    with torch.cuda.amp.autocast(dtype=dtype):
-        preds = model(images)
+if meta : 
+    with torch.no_grad():
+        with torch.cuda.amp.autocast(dtype=dtype):
+            preds = model(images, metadata=metadata)
+else: 
+    with torch.no_grad():
+        with torch.cuda.amp.autocast(dtype=dtype):
+            preds = model(images)
 
 pose_enc = preds["pose_enc"].cpu()      # shape (S, 9)
 

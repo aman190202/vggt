@@ -94,7 +94,7 @@ def load_and_preprocess_images_square(image_path_list, target_size=1024):
     return images, original_coords
 
 
-def load_and_preprocess_images(image_path_list, mode="crop"):
+def load_and_preprocess_images(image_path_list, mode="crop", return_metadata=False):
     """
     A quick start function to load and preprocess images for model input.
     This assumes the images should have the same shape for easier batching, but our model can also work well with different shapes.
@@ -130,6 +130,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
         raise ValueError("Mode must be either 'crop' or 'pad'")
 
     images = []
+    metadata_list = [] if return_metadata else None
     shapes = set()
     to_tensor = TF.ToTensor()
     target_size = 518
@@ -168,6 +169,32 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
         # Resize with new dimensions (width, height)
         img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
         img = to_tensor(img)  # Convert to tensor (0, 1)
+
+        # Optionally load metadata JSON with same filename
+        if return_metadata:
+            import json, os
+            meta_path = image_path
+            if "/images" in meta_path:
+                meta_path = meta_path.replace("/images", "/metadata") + ".json"
+            else:
+                meta_path = meta_path + ".json"
+            if os.path.isfile(meta_path):
+                try:
+                    with open(meta_path, "r") as f:
+                        meta = json.load(f)
+                    metadata = [
+                        meta.get("latitude", 0.0),
+                        meta.get("longitude", 0.0),
+                        meta.get("altitude", 0.0),
+                        meta.get("pitch", 0.0),
+                        meta.get("roll", 0.0),
+                        meta.get("yaw", 0.0),
+                    ]
+                except Exception:
+                    metadata = [0.0]*6
+            else:
+                metadata = [0.0]*6
+            metadata_list.append(torch.tensor(metadata, dtype=torch.float32))
 
         # Center crop height if it's larger than 518 (only in crop mode)
         if mode == "crop" and new_height > target_size:
@@ -221,10 +248,18 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
 
     images = torch.stack(images)  # concatenate images
 
+    if return_metadata:
+        metadata_tensor = torch.stack(metadata_list)  # (N, 6)
+    else:
+        metadata_tensor = None
+
     # Ensure correct shape when single image
     if len(image_path_list) == 1:
         # Verify shape is (1, C, H, W)
         if images.dim() == 3:
             images = images.unsqueeze(0)
 
-    return images
+    if return_metadata:
+        return images, metadata_tensor
+    else:
+        return images
