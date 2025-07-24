@@ -38,9 +38,8 @@ dataset = ColmapDataset(common_conf=common_conf)
 # -------------------------------------------------------------------------
 
 batch = dataset.get_data()
-print(len(batch["metadata"]))
-# save_ply(
-#     batch["world_points"][0].reshape(-1, 3), 
-#     batch["images"][0].reshape(-1, 3), 
-#     "debug.ply"
-# )
+save_ply(
+    batch["world_points"][0].reshape(-1, 3), 
+    batch["images"][0].reshape(-1, 3), 
+    "debug.ply"
+)

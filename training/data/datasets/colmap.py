@@ -70,10 +70,10 @@ class ColmapDataset(BaseDataset):
         self,
         common_conf,
         split: str = "train",
-        COLMAP_DIR: str = "/home/works/GreenTrees",
-        min_num_images: int = 24,
-        len_train: int = 100_000,
-        len_test: int = 10_000,
+        COLMAP_DIR: str = "/home/works/sample",
+        min_num_images: int = 48,
+        len_train: int = 100,
+        len_test: int = 10,
         expand_ratio: int = 8,
     ):
         super().__init__(common_conf=common_conf)
@@ -104,27 +104,43 @@ class ColmapDataset(BaseDataset):
         for scene in scene_names:
             scene_path = osp.join(COLMAP_DIR, scene)
             sparse_dir = osp.join(scene_path, "sparse")
-            metadata_dir = osp.join(scene_path,"metadata")
 
             if not osp.isfile(osp.join(sparse_dir, "cameras.txt")):
                 continue
 
             cameras, images = read_model(sparse_dir)   # .txt or .bin is fine
+            if not hasattr(self, "scene_index"):
+                self.scene_index = {}
+
+            # Sort the image list by image name or image_id (your choice)
+            sorted_imgs = sorted(images.items(), key=lambda kv: kv[1].name)  # or kv[0] for ID order
+            self.scene_index[scene] = []  # create empty list for this scene
 
             # Skip very small reconstructions
             if len(images) < min_num_images:
                 continue
 
-            for img_id, img in images.items():
-                img_path = osp.join(scene_path, "undistorted_images", img.name)
+            for img_id, img in sorted_imgs:
+                img_path = osp.join(scene_path, "images", img.name)
+                base_name = img.name
+                for ext in [".jpeg", ".jpg", ".png"]:
+                    if base_name.lower().endswith(ext):
+                        base_name = base_name[: -len(ext)]
+                        break
+                depth_path = osp.join(scene_path, "depths", base_name + ".h5")
+                gps_path = osp.join(scene_path, "metadata", img.name + ".json")
+
                 if not osp.isfile(img_path):
                     continue
-                gps_path = osp.join(scene_path, "metadata", img.name + ".json")
+
+                self.scene_index[scene].append(img_id)  # <- Save image ID in order
+
                 self.scene_map[(scene, img_id)] = {
                     "image": img,
                     "camera": cameras[img.camera_id],
                     "img_path": img_path,
-                    "gps_path" : gps_path
+                    "depth_path": depth_path,
+                    "gps_path": gps_path,
                 }
 
         self.entries: List[Tuple[str, int]] = list(self.scene_map.keys())
@@ -141,22 +157,46 @@ class ColmapDataset(BaseDataset):
     def _sample_entries(self, img_per_seq: int, ids):
         """
         Decide which (scene, image_id) tuples to load for this call.
+        Returns a list of (scene_name, image_id) pairs in serial order.
         """
-        if ids is not None:                       # caller supplied explicit list
+        if ids is not None:
             return ids
 
-        if self.inside_random and self.training:  # completely random sample
-            return random.sample(self.entries, k=img_per_seq)
+        if len(self.entries) == 0:
+            raise RuntimeError(
+                f"[ColmapDataset] No valid images found in '{self.COLMAP_DIR}'. "
+                "Ensure each scene has a valid sparse reconstruction with registered images."
+            )
 
-        # Default: contiguous chunk from the list (repeatable across epochs)
-        start = random.randrange(len(self.entries) - img_per_seq + 1)
-        return self.entries[start:start + img_per_seq]
+        # --- serial sampling across scenes ---
+        # Find scenes that have enough frames
+        valid_scenes = [
+            s for s in self.scene_index
+            if len(self.scene_index[s]) >= img_per_seq
+        ]
+
+        if not valid_scenes:
+            raise RuntimeError(
+                f"[ColmapDataset] No scene has at least {img_per_seq} images. "
+                "Check `min_num_images` and dataset size."
+            )
+
+        # Pick a scene randomly
+        scene = random.choice(valid_scenes)
+        scene_frames = self.scene_index[scene]  # ordered list of image_ids for this scene
+
+        # Pick a contiguous window
+        start = random.randint(0, len(scene_frames) - img_per_seq)
+        selected_ids = scene_frames[start : start + img_per_seq]
+
+        return [(scene, img_id) for img_id in selected_ids]
+
     # ----------------------------------------------------------------------- #
 
     def get_data(
         self,
         seq_index=None,
-        img_per_seq: int = 30,
+        img_per_seq: int = 1,
         seq_name=None,           # <- kept for API compatibility
         ids=None,
         aspect_ratio: float = 1.0,
@@ -180,11 +220,35 @@ class ColmapDataset(BaseDataset):
             img_data, cam_data = meta["image"], meta["camera"]
             img_path = meta["img_path"]
             gps_path = meta["gps_path"]
+            depth_path = meta["depth_path"]
             gps_data = None
+            depth_data = None
+
+            # Read GPS data if available
             if os.path.isfile(gps_path):
                 import json
                 with open(gps_path, "r") as f:
                     gps_data = json.load(f)
+
+            # Read depth data from .h5 file if available
+            if os.path.isfile(depth_path):
+                import h5py
+                with h5py.File(depth_path, "r") as f:
+                    # Try common keys, fallback to first dataset if unknown
+                    if "depth" in f:
+                        depth_data = f["depth"][:]
+                    elif len(f.keys()) > 0:
+                        first_key = list(f.keys())[0]
+                        depth_data = f[first_key][:]
+                    else:
+                        raise ValueError(f"HDF5 file {depth_path} is empty or malformed")
+
+                # Validate depth_data shape
+                if depth_data is None or not isinstance(depth_data, np.ndarray) or depth_data.ndim != 2:
+                    raise ValueError(f"Depth map at {depth_path} is not a valid 2D array. Got shape: {getattr(depth_data, 'shape', None)}")
+            else:
+                raise FileNotFoundError(f"Depth file not found: {depth_path}")
+
             if gps_data is not None:
                 metadata = [
                     gps_data.get("latitude", 0.0),
@@ -195,7 +259,7 @@ class ColmapDataset(BaseDataset):
                     gps_data.get("yaw", 0.0),
                 ]
             else:
-                metadata = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                metadata = [0,0,0,0,0,0]
             # --- load RGB -------------------------------------------------- #
             rgb = read_image_cv2(img_path)
             original_size = np.asarray(rgb.shape[:2], dtype=np.int32)
@@ -220,7 +284,7 @@ class ColmapDataset(BaseDataset):
                 _
             ) = self.process_one_image(
                 rgb,
-                depth_fake,
+                depth_data,
                 ext,
                 K,
                 original_size,

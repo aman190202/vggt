@@ -121,7 +121,7 @@ class Aggregator(nn.Module):
         self.patch_size = patch_size
         self.aa_block_size = aa_block_size
 
-        # FiLM layer for metadata conditioning (optional)
+        # # FiLM layer for metadata conditioning (optional)
         self.film = FiLM(input_dim=metadata_dim, hidden_dim=film_hidden_dim, feature_dim=embed_dim)
 
         # Validate that depth is divisible by aa_block_size
@@ -217,16 +217,24 @@ class Aggregator(nn.Module):
         # ------------------------------------------------------------------
         # Optional FiLM modulation with per-frame metadata
         # ------------------------------------------------------------------
-        if metadata is not None:
+        if metadata is not None and not torch.all(metadata == 0):
             # Expect metadata shape (B, S, metadata_dim) or (S, metadata_dim)
             if metadata.dim() == 2:  # (S, D)
                 metadata = metadata.unsqueeze(0)  # add batch dim => (1, S, D)
             if metadata.shape[0] != B:
-                raise ValueError(f"metadata batch size {metadata.shape[0]} does not match images batch size {B}")
+                if metadata.shape[0] == 1:
+                    # Broadcast the same metadata to all items in the batch
+                    metadata = metadata.expand(B, -1, -1)
+                else:
+                    raise ValueError(f"metadata batch size {metadata.shape[0]} does not match images batch size {B}")
             if metadata.shape[1] != S:
-                raise ValueError(f"metadata seq len {metadata.shape[1]} does not match images seq len {S}")
+                if metadata.shape[1] == 1:
+                    # Broadcast the single metadata vector across all frames
+                    metadata = metadata.expand(-1, S, -1)
+                else:
+                    raise ValueError(f"metadata seq len {metadata.shape[1]} does not match images seq len {S}")
 
-            metadata_flat = metadata.view(B * S, -1).to(device='cuda')  # (B*S, D)
+            metadata_flat = metadata.contiguous().view(B * S, -1).to(device='cuda')  # (B*S, D)
 
             # patch_tokens may be a dict (depending on patch_embed implementation)
             if isinstance(patch_tokens, dict):

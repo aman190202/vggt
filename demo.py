@@ -14,13 +14,15 @@ dtype  = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch
 
 model = VGGT(enable_camera=True, enable_point=False,
              enable_depth=False, enable_track=False).to(device)
-model.load_state_dict(torch.load("/home/works/vggt/training/logs/exp003/ckpts/checkpoint.pt"), strict=False)
+
+model.load_state_dict(torch.load("checkpoint/model.pt"))
+
 
 # ─── your image list here ─────────────────────────────────────────
 import glob
-image_root = "/home/works/GreenTrees/GT_AV_F25_P087/images"
+image_root = "/home/works/sample/localized_dense_metric/images"
 image_names = sorted(glob.glob(f"{image_root}/*"))
-meta = True
+meta = False
 if meta :
     images, metadata = load_and_preprocess_images(image_names, return_metadata=True)
     metadata = metadata.to(device)

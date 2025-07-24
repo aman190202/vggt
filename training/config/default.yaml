@@ -1,14 +1,14 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: scratch
+exp_name: scratch_lr_reduced_len_100k_48_auugoff
 img_size: 518
 num_workers: 8
 seed_value: 42
 accum_steps: 4   
 patch_size: 14
 val_epoch_freq: 10
-max_img_per_gpu: 120
+max_img_per_gpu: 48
 
 limit_train_batches: 800
 limit_val_batches: 400
@@ -25,13 +25,16 @@ data:
       patch_size: ${patch_size}
       debug: False
       repeat_batch: True
+      inside_random : False
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
         - _target_: data.datasets.colmap.ColmapDataset
           split: train
-          COLMAP_DIR: /home/works/GreenTrees
-          len_train : 400
+          COLMAP_DIR: /home/works/sample
+          len_train : 100000
+          min_num_images: 48
+          
   val:
     _target_: data.dynamic_dataloader.DynamicTorchDataset
     num_workers: ${num_workers}
@@ -39,14 +42,16 @@ data:
     common_config:
       img_size: ${img_size}
       patch_size: ${patch_size}
-      debug: True
+      debug: False
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
         - _target_: data.datasets.colmap.ColmapDataset
           split: test
-          COLMAP_DIR: /home/works/GreenTrees
-          len_test : 100
+          COLMAP_DIR: /home/works/sample
+          min_num_images : 48
+          len_test : 1000
+
 
 logging:
   log_dir: logs
@@ -57,7 +62,7 @@ logging:
   all_ranks: False
   tensorboard_writer:
     _target_: train_utils.tb_writer.TensorBoardLogger
-    path: ${logging.log_dir}/tensorboard
+    path: ${logging.log_dir}/tensorboard/${exp_name}
   scalar_keys_to_log:
     train:
       keys_to_log:
@@ -101,7 +106,7 @@ optim:
 
   optimizer:
     _target_: torch.optim.AdamW
-    lr: 2e-5
+    lr: 1e-5
     weight_decay: 0.05
 
   frozen_module_names:
