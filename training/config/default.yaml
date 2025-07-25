@@ -1,13 +1,13 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: scratch_lr_reduced_len_100k_48_auugoff
+exp_name: scratch_lr_reduced_OG_lenghts
 img_size: 518
 num_workers: 8
 seed_value: 42
 accum_steps: 4   
 patch_size: 14
-val_epoch_freq: 10
+val_epoch_freq: 5
 max_img_per_gpu: 48
 
 limit_train_batches: 800
@@ -30,10 +30,10 @@ data:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
         - _target_: data.datasets.colmap.ColmapDataset
-          split: train
-          COLMAP_DIR: /home/works/sample
+          split: True
+          COLMAP_DIR: /workspace/VGGT
           len_train : 100000
-          min_num_images: 48
+          min_num_images: 50
           
   val:
     _target_: data.dynamic_dataloader.DynamicTorchDataset
@@ -48,9 +48,9 @@ data:
       dataset_configs:
         - _target_: data.datasets.colmap.ColmapDataset
           split: test
-          COLMAP_DIR: /home/works/sample
-          min_num_images : 48
-          len_test : 1000
+          COLMAP_DIR: /workspace/test
+          min_num_images : 50
+          len_test : 10000
 
 
 logging:
@@ -85,7 +85,7 @@ logging:
 checkpoint:
   save_dir: logs/${exp_name}/ckpts
   save_freq: 100
-  resume_checkpoint_path: /home/works/vggt/checkpoint/model.pt
+  resume_checkpoint_path: /workspace/checkpoint/model.pt
   strict: False
 
 
@@ -106,8 +106,8 @@ optim:
 
   optimizer:
     _target_: torch.optim.AdamW
-    lr: 1e-5
-    weight_decay: 0.05
+    lr: 1e-6
+    weight_decay: 0.02
 
   frozen_module_names:
       - "*aggregator*"  # example, freeze the aggregator
@@ -123,7 +123,7 @@ optim:
         norm_type: 2
   options:
     lr:
-      - scheduler:
+      - scheduler: 
           _target_: fvcore.common.param_scheduler.CompositeParamScheduler
           schedulers:
             - _target_: fvcore.common.param_scheduler.LinearParamScheduler
@@ -142,7 +142,7 @@ optim:
 
 
 
-max_epochs: 1000
+max_epochs: 5
 
 model:
   _target_: vggt.models.vggt.VGGT

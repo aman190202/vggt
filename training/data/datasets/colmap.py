@@ -196,7 +196,7 @@ class ColmapDataset(BaseDataset):
     def get_data(
         self,
         seq_index=None,
-        img_per_seq: int = 1,
+        img_per_seq: int = 48,
         seq_name=None,           # <- kept for API compatibility
         ids=None,
         aspect_ratio: float = 1.0,
@@ -247,7 +247,10 @@ class ColmapDataset(BaseDataset):
                 if depth_data is None or not isinstance(depth_data, np.ndarray) or depth_data.ndim != 2:
                     raise ValueError(f"Depth map at {depth_path} is not a valid 2D array. Got shape: {getattr(depth_data, 'shape', None)}")
             else:
-                raise FileNotFoundError(f"Depth file not found: {depth_path}")
+                # If depth file is not found, make depth all ones with the same size as the image
+                rgb = read_image_cv2(img_path)
+                height, width = rgb.shape[:2]
+                depth_data = np.ones((height, width), dtype=np.float32)
 
             if gps_data is not None:
                 metadata = [

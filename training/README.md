@@ -49,7 +49,7 @@ checkpoint:
 To fine-tune the provided pre-trained model on the Co3D dataset, run the following command. This example uses 4 GPUs with PyTorch Distributed Data Parallel (DDP):
 
 ```bash
-torchrun --nproc_per_node=4 launch.py
+torchrun --nproc_per_node=6 launch.py
 ```
 
 The default configuration in `training/config/default.yaml` is set up for fine-tuning. It automatically resumes from a checkpoint and freezes the model's `aggregator` module during training.
