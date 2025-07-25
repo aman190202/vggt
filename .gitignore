@@ -155,3 +155,4 @@ apple_train.jgz
 training/vkitti/
 vkitti/
 *.ply
+checkpoint_700.pt

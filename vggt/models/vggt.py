@@ -16,10 +16,11 @@ from vggt.heads.track_head import TrackHead
 
 class VGGT(nn.Module, PyTorchModelHubMixin):
     def __init__(self, img_size=518, patch_size=14, embed_dim=1024,
-                 enable_camera=True, enable_point=True, enable_depth=True, enable_track=True):
+                 enable_camera=True, enable_point=True, enable_depth=True, enable_track=True,
+                 use_film: bool = False):
         super().__init__()
 
-        self.aggregator = Aggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim)
+        self.aggregator = Aggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, use_film=use_film)
 
         self.camera_head = CameraHead(dim_in=2 * embed_dim) if enable_camera else None
         self.point_head = DPTHead(dim_in=2 * embed_dim, output_dim=4, activation="inv_log", conf_activation="expp1") if enable_point else None
@@ -58,6 +59,7 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
             
         if query_points is not None and len(query_points.shape) == 2:
             query_points = query_points.unsqueeze(0)
+
 
         aggregated_tokens_list, patch_start_idx = self.aggregator(images, metadata)
 

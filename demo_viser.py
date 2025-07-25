@@ -68,22 +68,45 @@ def viser_wrapper(
 
     # Unpack prediction dict
     images = pred_dict["images"]  # (S, 3, H, W)
-    world_points_map = pred_dict["world_points"]  # (S, H, W, 3)
-    conf_map = pred_dict["world_points_conf"]  # (S, H, W)
 
-    depth_map = pred_dict["depth"]  # (S, H, W, 1)
-    depth_conf = pred_dict["depth_conf"]  # (S, H, W)
-
-    extrinsics_cam = pred_dict["extrinsic"]  # (S, 3, 4)
-    intrinsics_cam = pred_dict["intrinsic"]  # (S, 3, 3)
-
-    # Compute world points from depth if not using the precomputed point map
-    if not use_point_map:
-        world_points = unproject_depth_map_to_point_map(depth_map, extrinsics_cam, intrinsics_cam)
-        conf = depth_conf
+    # Safely get extrinsics and intrinsics
+    if "extrinsic" in pred_dict:
+        extrinsics_cam = pred_dict["extrinsic"]  # (S, 3, 4)
     else:
-        world_points = world_points_map
-        conf = conf_map
+        print("Warning: 'extrinsic' not in predictions, using identity")
+        S = images.shape[0]
+        extrinsics_cam = np.tile(np.eye(3,4)[None], (S,1,1)).astype(np.float32)
+
+    if "intrinsic" in pred_dict:
+        intrinsics_cam = pred_dict["intrinsic"]  # (S, 3, 3)
+    else:
+        print("Warning: 'intrinsic' not in predictions, using default")
+        S, _, H, W = images.shape
+        intrinsics_cam = np.tile(np.array([[H,0,W/2],[0,H,H/2],[0,0,1]])[None], (S,1,1)).astype(np.float32)
+
+    # Compute world points
+    if use_point_map:
+        if "world_points" in pred_dict:
+            world_points = pred_dict["world_points"]  # (S, H, W, 3)
+            conf = pred_dict["world_points_conf"]  # (S, H, W)
+        else:
+            print("Warning: 'world_points' not in predictions, generating random points")
+            S, _, H, W = images.shape
+            world_points = np.random.randn(S, H, W, 3).astype(np.float32)
+            conf = np.random.rand(S, H, W).astype(np.float32)
+    else:
+        if "depth" in pred_dict:
+            depth_map = pred_dict["depth"]  # (S, H, W, 1)
+            depth_conf = pred_dict["depth_conf"]  # (S, H, W)
+            world_points = unproject_depth_map_to_point_map(depth_map, extrinsics_cam, intrinsics_cam)
+            conf = depth_conf
+        else:
+            print("Warning: 'depth' not in predictions, generating random depth")
+            S, _, H, W = images.shape
+            depth_map = np.random.rand(S, H, W, 1).astype(np.float32) * 10 + 1  # random depth 1-11
+            depth_conf = np.random.rand(S, H, W).astype(np.float32)
+            world_points = unproject_depth_map_to_point_map(depth_map, extrinsics_cam, intrinsics_cam)
+            conf = depth_conf
 
     # Apply sky segmentation if enabled
     if mask_sky and image_folder is not None:
@@ -316,6 +339,10 @@ parser.add_argument(
     "--conf_threshold", type=float, default=25.0, help="Initial percentage of low-confidence points to filter out"
 )
 parser.add_argument("--mask_sky", action="store_true", help="Apply sky segmentation to filter out sky points")
+parser.add_argument("--checkpoint_path", type=str, default=None, help="Path to fine-tuned checkpoint (optional)")
+parser.add_argument("--disable_point", action="store_true", help="Disable point head")
+parser.add_argument("--disable_depth", action="store_true", help="Disable depth head")
+parser.add_argument("--disable_track", action="store_true", help="Disable track head")
 
 
 def main():
@@ -336,35 +363,57 @@ def main():
     --port: Port number for the viser server
     --conf_threshold: Initial percentage of low-confidence points to filter out
     --mask_sky: Apply sky segmentation to filter out sky points
+    --checkpoint_path: Path to fine-tuned checkpoint (optional)
+    --disable_point: Disable point head (for fine-tuned checkpoints without it)
+    --disable_depth: Disable depth head (for fine-tuned checkpoints without it)
+    --disable_track: Disable track head (for fine-tuned checkpoints without it)
     """
     args = parser.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
     print("Initializing and loading VGGT model...")
-    # model = VGGT.from_pretrained("facebook/VGGT-1B")
-
-    model = VGGT()
-    _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
-    model.load_state_dict(torch.hub.load_state_dict_from_url(_URL))
+    model = VGGT(use_film=(args.checkpoint_path is not None),
+                 enable_point=not args.disable_point,
+                 enable_depth=not args.disable_depth,
+                 enable_track=not args.disable_track)
+    if args.checkpoint_path is not None:
+        checkpoint = torch.load(args.checkpoint_path, map_location=device)
+        state_dict = checkpoint.get('model', checkpoint)  # Load 'model' if exists, else assume it's the state_dict
+        model.load_state_dict(state_dict, strict=False)
+    else:
+        _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+        pretrained_state = torch.hub.load_state_dict_from_url(_URL, map_location=device)
+        model.load_state_dict(pretrained_state, strict=False)
 
     model.eval()
     model = model.to(device)
+
+    # Determine whether to use FiLM conditioning based on the model configuration
+    use_film = hasattr(model.aggregator, "film")
 
     # Use the provided image folder path
     print(f"Loading images from {args.image_folder}...")
     image_names = glob.glob(os.path.join(args.image_folder, "*"))
     print(f"Found {len(image_names)} images")
-
-    images = load_and_preprocess_images(image_names).to(device)
+    if use_film:
+        images, metadata = load_and_preprocess_images(image_names, mode="pad", return_metadata=True)
+        images = images.to(device)
+        metadata = metadata.to(device)
+    else:
+        images = load_and_preprocess_images(image_names).to(device)
     print(f"Preprocessed images shape: {images.shape}")
 
     print("Running inference...")
     dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
-
-    with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
-            predictions = model(images)
+    if use_film:
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(dtype=dtype):
+                predictions = model(images, metadata)
+    else:
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(dtype=dtype):
+                predictions = model(images)
 
     print("Converting pose encoding to extrinsic and intrinsic matrices...")
     extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])

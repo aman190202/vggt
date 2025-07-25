@@ -13,16 +13,20 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype  = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
 
 model = VGGT(enable_camera=True, enable_point=False,
-             enable_depth=False, enable_track=False).to(device)
+             enable_depth=False, enable_track=False, use_film=True).to(device)
 
-model.load_state_dict(torch.load("checkpoint/model.pt"))
+# model.load_state_dict(torch.load("checkpoint/model.pt"))
+
+checkpoint = torch.load("checkpoint_700.pt", map_location=device)
+state_dict = checkpoint.get('model', checkpoint)  # Load 'model' if exists, else assume it's the state_dict
+model.load_state_dict(state_dict)
 
 
 # ─── your image list here ─────────────────────────────────────────
 import glob
-image_root = "/home/works/sample/localized_dense_metric/images"
+image_root = "/home/works/GreenTrees/GT_AV_F25_P128/images"
 image_names = sorted(glob.glob(f"{image_root}/*"))
-meta = False
+meta = True
 if meta :
     images, metadata = load_and_preprocess_images(image_names, return_metadata=True)
     metadata = metadata.to(device)

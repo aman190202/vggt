@@ -101,7 +101,7 @@ def visualize_poses(images_dict):
 
 
 if __name__ == "__main__":
-    base_path = "/home/works/vggt/checkpoint/model.pt"  # ← change this
+    base_path = "/home/works/GreenTrees/GT_AV_F25_P128/sparse"  # ← change this
     images_txt = os.path.join(base_path, "images.txt")
     cameras_txt = os.path.join(base_path, "cameras.txt")
 
