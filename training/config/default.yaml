@@ -1,7 +1,7 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: scratch_lr_reduced_OG_lenghts
+exp_name: scratch_lr_reduced_lr
 img_size: 518
 num_workers: 8
 seed_value: 42
@@ -26,6 +26,7 @@ data:
       debug: False
       repeat_batch: True
       inside_random : False
+      img_nums : [25,30]
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
@@ -43,6 +44,7 @@ data:
       img_size: ${img_size}
       patch_size: ${patch_size}
       debug: False
+      img_nums : [25,30]
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
@@ -54,7 +56,7 @@ data:
 
 
 logging:
-  log_dir: logs
+  log_dir: /workspace/logs
   log_visuals: False
   log_freq: 10
   log_level_primary: DEBUG
@@ -83,7 +85,7 @@ logging:
 
 
 checkpoint:
-  save_dir: logs/${exp_name}/ckpts
+  save_dir: /workspace/logs/${exp_name}/ckpts
   save_freq: 100
   resume_checkpoint_path: /workspace/checkpoint/model.pt
   strict: False
@@ -128,9 +130,9 @@ optim:
           schedulers:
             - _target_: fvcore.common.param_scheduler.LinearParamScheduler
               start_value: 1e-8
-              end_value: 5e-5
+              end_value: 1e-6
             - _target_: fvcore.common.param_scheduler.CosineParamScheduler
-              start_value: 5e-5
+              start_value: 1e-6
               end_value: 1e-8
           lengths: [0.05, 0.95]
           interval_scaling: ['rescaled', 'rescaled']
@@ -142,7 +144,7 @@ optim:
 
 
 
-max_epochs: 5
+max_epochs: 1000
 
 model:
   _target_: vggt.models.vggt.VGGT
