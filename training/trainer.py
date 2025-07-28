@@ -554,12 +554,21 @@ class Trainer:
 
             batch = copy_data_to_device(batch, self.device, non_blocking=True)
 
-            accum_steps = self.accum_steps
+            # Adapt accumulation steps to the real batch size to prevent
+            # zero-length chunks that cause runtime errors when the batch is
+            # smaller than the intended `accum_steps`.
+            batch_size = batch["images"].shape[0]
+            effective_accum_steps = self.accum_steps
 
-            if accum_steps==1:
+            # If the batch is smaller than the requested accumulation steps or cannot
+            # be split evenly, fall back to a single step.
+            if batch_size < effective_accum_steps or batch_size % effective_accum_steps != 0:
+                effective_accum_steps = 1
+
+            if effective_accum_steps == 1:
                 chunked_batches = [batch]
             else:
-                chunked_batches = chunk_batch_for_accum_steps(batch, accum_steps)
+                chunked_batches = chunk_batch_for_accum_steps(batch, effective_accum_steps)
 
             self._run_steps_on_batch_chunks(
                 chunked_batches, phase, loss_meters
