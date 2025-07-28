@@ -1,7 +1,7 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: sanity_overfit_single_scene_aggregator_learns
+exp_name: Jul_28_midday_GreenTrees_run_1e-4
 img_size: 518
 num_workers: 8
 seed_value: 42
@@ -10,8 +10,8 @@ patch_size: 14
 val_epoch_freq: 100
 max_img_per_gpu: 48
 
-limit_train_batches: 100
-limit_val_batches: 100
+limit_train_batches: 1600
+limit_val_batches: 800
 
 
 data:
@@ -23,7 +23,7 @@ data:
     common_config:
       img_size: ${img_size}
       patch_size: ${patch_size}
-      debug: True
+      debug: False
       repeat_batch: False
       inside_random : False
     dataset:
@@ -42,7 +42,8 @@ data:
     common_config:
       img_size: ${img_size}
       patch_size: ${patch_size}
-      debug: True
+      debug: False
+      repeat_batch: False
     dataset:
       _target_: data.composed_dataset.ComposedDataset
       dataset_configs:
@@ -55,7 +56,7 @@ data:
 logging:
   log_dir: /workspace/logs
   log_visuals: False
-  log_freq: 10
+  log_freq: 1
   log_level_primary: DEBUG
   log_level_secondary: WARNING
   all_ranks: False
@@ -83,7 +84,7 @@ logging:
 
 checkpoint:
   save_dir: /workspace/logs/${exp_name}/ckpts
-  save_freq: 1
+  save_freq: 10
   resume_checkpoint_path: /workspace/checkpoint/model.pt
   strict: False
 
@@ -105,7 +106,7 @@ optim:
 
   optimizer:
     _target_: torch.optim.AdamW
-    lr: 1e-5
+    lr: 1e-4
     weight_decay: 0.01
 
   # frozen_module_names:
@@ -127,10 +128,10 @@ optim:
           schedulers:
             - _target_: fvcore.common.param_scheduler.LinearParamScheduler
               start_value: 0.0
-              end_value: 1e-5
+              end_value: 1e-4
             - _target_: fvcore.common.param_scheduler.CosineParamScheduler
-              start_value: 1e-5
-              end_value: 1e-7
+              start_value: 1e-4
+              end_value: 1e-6
           lengths: [0.05, 0.95]
           interval_scaling: ['rescaled', 'rescaled']
     weight_decay:

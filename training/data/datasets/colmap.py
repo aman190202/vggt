@@ -11,6 +11,12 @@ from data.dataset_util import *
 from data.base_dataset import BaseDataset
 from data.read_write_model import read_model, qvec2rotmat
 
+import math
+try:
+    import utm as _utm_lib
+except ImportError:  # optional dependency
+    _utm_lib = None
+
 
 # --------------------------------------------------------------------------- #
 # Helper functions
@@ -201,6 +207,7 @@ class ColmapDataset(BaseDataset):
         ids=None,
         aspect_ratio: float = 1.0,
     ):
+        
         entry_tuples = self._sample_entries(img_per_seq, ids)
         ids_numeric = np.fromiter((i for (_, i) in entry_tuples),
                                   dtype=np.int32)
@@ -253,16 +260,29 @@ class ColmapDataset(BaseDataset):
                 depth_data = np.ones((height, width), dtype=np.float32)
 
             if gps_data is not None:
+                # Convert WGS-84 (lat/lon) to UTM easting / northing  (metres)
+                lat = gps_data.get("latitude", 0.0)
+                lon = gps_data.get("longitude", 0.0)
+                if _utm_lib is not None:
+                    easting, northing, _, _ = _utm_lib.from_latlon(lat, lon)
+                else:
+                    # Fallback: approximate Web-Mercator conversion (not as accurate as true UTM).
+                    # Keeps everything in metres so model still gets values in similar scale.
+                    # For most places |lat| < 85.
+                    R = 6378137.0  # WGS-84 Earth radius (m)
+                    easting = math.radians(lon) * R
+                    northing = math.log(math.tan(math.pi / 4 + math.radians(lat) / 2)) * R
+
                 metadata = [
-                    gps_data.get("latitude", 0.0),
-                    gps_data.get("longitude", 0.0),
+                    easting,
+                    northing,
                     gps_data.get("altitude", 0.0),
                     gps_data.get("pitch", 0.0),
                     gps_data.get("roll", 0.0),
                     gps_data.get("yaw", 0.0),
                 ]
             else:
-                metadata = [0,0,0,0,0,0]
+                metadata = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             # --- load RGB -------------------------------------------------- #
             rgb = read_image_cv2(img_path)
             original_size = np.asarray(rgb.shape[:2], dtype=np.int32)
@@ -307,6 +327,8 @@ class ColmapDataset(BaseDataset):
 
         # Convert metadata list to numpy array for proper tensor conversion
         metadatas = np.asarray(metadatas, dtype=np.float32)
+        origin = metadatas[0, :2].copy()      # easting, northing of first frame
+        metadatas[:, :2] -= origin  # subtract origin from all frames
 
         return {
             "seq_name": "colmap_batch",
