@@ -1,14 +1,14 @@
 defaults:
   - default_dataset.yaml
 
-exp_name: scratch_lr_reduced_lr
+exp_name: finetune_with_reduced_lr_og_lengths
 img_size: 518
 num_workers: 8
 seed_value: 42
 accum_steps: 4   
 patch_size: 14
 val_epoch_freq: 5
-max_img_per_gpu: 48
+max_img_per_gpu: 72
 
 limit_train_batches: 800
 limit_val_batches: 400
@@ -52,7 +52,7 @@ data:
           split: test
           COLMAP_DIR: /workspace/test
           min_num_images : 50
-          len_test : 10000
+          len_test : 100000
 
 
 logging:
@@ -144,7 +144,7 @@ optim:
 
 
 
-max_epochs: 1000
+max_epochs: 100
 
 model:
   _target_: vggt.models.vggt.VGGT
