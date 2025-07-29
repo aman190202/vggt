@@ -182,9 +182,23 @@ def load_and_preprocess_images(image_path_list, mode="crop", return_metadata=Fal
                 try:
                     with open(meta_path, "r") as f:
                         meta = json.load(f)
+                    # Convert WGS-84 lat/lon to UTM easting/northing to match training pipeline
+                    lat = meta.get("latitude", 0.0)
+                    lon = meta.get("longitude", 0.0)
+
+                    try:
+                        import utm as _utm_lib
+                        easting, northing, _, _ = _utm_lib.from_latlon(lat, lon)
+                    except Exception:
+                        # Either utm not installed or conversion failed; use Web-Mercator fallback
+                        import math
+                        R = 6378137.0
+                        easting = math.radians(lon) * R
+                        northing = math.log(math.tan(math.pi / 4 + math.radians(lat) / 2)) * R
+
                     metadata = [
-                        meta.get("latitude", 0.0),
-                        meta.get("longitude", 0.0),
+                        easting,
+                        northing,
                         meta.get("altitude", 0.0),
                         meta.get("pitch", 0.0),
                         meta.get("roll", 0.0),
@@ -250,6 +264,9 @@ def load_and_preprocess_images(image_path_list, mode="crop", return_metadata=Fal
 
     if return_metadata:
         metadata_tensor = torch.stack(metadata_list)  # (N, 6)
+        # Align to same canonical origin used during training: subtract first frame's easting/northing
+        origin_xy = metadata_tensor[0, :2].clone()
+        metadata_tensor[:, :2] -= origin_xy
     else:
         metadata_tensor = None
 
